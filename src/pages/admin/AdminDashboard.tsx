@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Users, ShoppingBag, TrendingUp, MapPin, Check, X, Loader, Plus, Eye, EyeOff } from 'lucide-react';
+import { LogOut, Users, ShoppingBag, TrendingUp, MapPin, Check, X, Loader, Plus, Eye, EyeOff, Store } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
@@ -14,6 +14,18 @@ const ROLE_LABELS: Record<string, string> = {
 const STATUT_COLORS: Record<string, string> = {
     actif: 'badge-green', inactif: 'badge-gray', suspendu: 'badge-red', en_attente: 'badge-orange'
 };
+const TYPE_COMMERCE_LABELS: Record<string, string> = {
+    restaurant_fastfood: '🍔 Restaurant',
+    supermarché_épicerie: '🛒 Supermarché',
+    marché_légumes: '🥬 Marché',
+    boulangerie_pâtisserie: '🥖 Boulangerie',
+    téléphonie_électronique: '📱 Électronique',
+    vêtements_mode: '👕 Mode',
+    coiffure_beauté: '💇 Coiffure/Beauté',
+    pharmacie_parapharmacie: '💊 Pharmacie',
+    services: '🔨 Services',
+    autre: '🏪 Autre'
+};
 
 // Formulaire création utilisateur/commercant
 const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) => {
@@ -24,7 +36,7 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
     const [form, setForm] = useState({
         nom: '', prenom: '', telephone: '', email: '', password: '', ville: '', role: '',
         // Commerce
-        nom_boutique: '', categorie: '', description: '', quartier: '', telephone_commerce: '',
+        nom_boutique: '', type_commerce: '', categorie: '', description: '', quartier: '', telephone_commerce: '',
         frais_livraison: '500', temps_preparation: '20', commande_minimum: '1000',
     });
 
@@ -47,9 +59,10 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
             // 2. Si commercant, créer le commerce
             if (role === 'commercant' && form.nom_boutique) {
                 const token = userRes.data.data.token;
-                await api.post('/commercants/mon-commerce/creer', {
+                await api.post('/commercants/inscription', {
                     nom_boutique: form.nom_boutique,
-                    categorie: form.categorie || 'restaurant',
+                    type_commerce: form.type_commerce || 'autre',
+                    categorie: form.categorie || 'autre',
                     description: form.description,
                     adresse: { quartier: form.quartier },
                     telephone: form.telephone_commerce || form.telephone,
@@ -170,10 +183,19 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
                                     className="input-field" placeholder="Maquis Chez Adjoua" />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Catégorie *</label>
-                                <select value={form.categorie} onChange={e => update('categorie', e.target.value)} className="input-field">
-                                    <option value="">Sélectionnez</option>
-                                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Type de commerce *</label>
+                                <select value={form.type_commerce} onChange={e => update('type_commerce', e.target.value)} className="input-field">
+                                    <option value="">Sélectionnez un type</option>
+                                    <option value="restaurant_fastfood">🍔 Restaurant / Fast-food</option>
+                                    <option value="supermarché_épicerie">🛒 Supermarché / Épicerie</option>
+                                    <option value="marché_légumes">🥬 Marché / Légumes</option>
+                                    <option value="boulangerie_pâtisserie">🥖 Boulangerie / Pâtisserie</option>
+                                    <option value="téléphonie_électronique">📱 Téléphonie / Électronique</option>
+                                    <option value="vêtements_mode">👕 Vêtements / Mode</option>
+                                    <option value="coiffure_beauté">💇 Coiffure / Beauté</option>
+                                    <option value="pharmacie_parapharmacie">💊 Pharmacie / Parapharmacie</option>
+                                    <option value="services">🔨 Services</option>
+                                    <option value="autre">🏪 Autre</option>
                                 </select>
                             </div>
                             <div>
@@ -229,6 +251,7 @@ export default function AdminDashboard() {
     const [onglet, setOnglet] = useState<'stats' | 'users' | 'commandes' | 'zones'>('stats');
     const [stats, setStats] = useState<any>(null);
     const [users, setUsers] = useState<any[]>([]);
+    const [commercants, setCommercants] = useState<any[]>([]);
     const [commandes, setCommandes] = useState<any[]>([]);
     const [zones, setZones] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -244,15 +267,18 @@ export default function AdminDashboard() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [statsRes, zonesRes] = await Promise.all([
+            const [statsRes, zonesRes, commercantsRes] = await Promise.all([
                 api.get('/stats/admin'),
                 api.get('/zones'),
+                api.get('/commercants/admin/tous')
             ]);
             setStats(statsRes.data.data.stats);
             setZones(zonesRes.data.data.zones);
+            setCommercants(commercantsRes.data.data.commercants);
             await fetchUsers();
             await fetchCommandes();
         } catch (error) {
+            console.error('Erreur chargement:', error);
             toast.error('Erreur de chargement');
         } finally { setLoading(false); }
     };
@@ -283,8 +309,35 @@ export default function AdminDashboard() {
             await api.patch(`/users/${userId}/statut`, { statut });
             toast.success(`Utilisateur ${statut === 'actif' ? 'activé ✅' : 'suspendu ❌'}`);
             fetchUsers();
+            fetchData();
         } catch (error) { toast.error('Erreur'); }
         finally { setActionLoading(null); }
+    };
+
+    // NOUVELLE FONCTION : Valider un commerçant
+    const validerCommercant = async (commercantId: string) => {
+        setActionLoading(commercantId);
+        try {
+            await api.patch(`/commercants/admin/${commercantId}/valider`);
+            toast.success('✅ Commerçant validé avec succès !');
+            fetchData(); // Recharge les données
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Erreur lors de la validation');
+        } finally { setActionLoading(null); }
+    };
+
+    // NOUVELLE FONCTION : Rejeter un commerçant
+    const rejeterCommercant = async (commercantId: string) => {
+        setActionLoading(commercantId);
+        const raison = prompt('Raison du rejet :');
+        if (!raison) return;
+        try {
+            await api.patch(`/commercants/admin/${commercantId}/rejeter`, { raison });
+            toast.success('❌ Commerçant rejeté');
+            fetchData();
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Erreur lors du rejet');
+        } finally { setActionLoading(null); }
     };
 
     if (loading) {
@@ -329,7 +382,7 @@ export default function AdminDashboard() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                         {[
                             { label: 'Utilisateurs', value: stats.totalUsers, icon: <Users className="w-5 h-5" />, color: '#ff7300' },
-                            { label: 'Commercants', value: stats.totalCommercants, icon: <MapPin className="w-5 h-5" />, color: '#009639' },
+                            { label: 'Commercants', value: stats.totalCommercants, icon: <Store className="w-5 h-5" />, color: '#009639' },
                             { label: 'Commandes', value: stats.totalCommandes, icon: <ShoppingBag className="w-5 h-5" />, color: '#3b82f6' },
                             { label: 'Livrées', value: stats.commandesLivrees, icon: <TrendingUp className="w-5 h-5" />, color: '#8b5cf6' },
                         ].map((s, i) => (
@@ -397,6 +450,45 @@ export default function AdminDashboard() {
                                 ))}
                             </div>
                         </div>
+
+                        {/* Section des commerçants en attente */}
+                        <div className="card">
+                            <h3 className="font-bold text-gray-900 mb-4">⏳ Commerçants en attente de validation</h3>
+                            {commercants.filter(c => !c.est_valide).length === 0 ? (
+                                <p className="text-gray-500 text-sm">Aucun commerçant en attente</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {commercants.filter(c => !c.est_valide).map((c: any) => (
+                                        <div key={c._id} className="flex items-center justify-between p-3 bg-orange-50 rounded-xl border border-orange-200">
+                                            <div>
+                                                <p className="font-bold text-gray-900">{c.nom_boutique}</p>
+                                                <p className="text-sm text-gray-600">{TYPE_COMMERCE_LABELS[c.type_commerce] || '🏪 Autre'}</p>
+                                                <p className="text-xs text-gray-500">📞 {c.telephone} • 📍 {c.ville}</p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => validerCommercant(c._id)}
+                                                    disabled={actionLoading === c._id}
+                                                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-bold bg-green-500 hover:bg-green-600"
+                                                >
+                                                    {actionLoading === c._id ? <Loader className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                                    Valider
+                                                </button>
+                                                <button
+                                                    onClick={() => rejeterCommercant(c._id)}
+                                                    disabled={actionLoading === c._id}
+                                                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-bold bg-red-500 hover:bg-red-600"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                    Rejeter
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         <div className="card">
                             <h3 className="font-bold text-gray-900 mb-4">🗺️ Villes actives</h3>
                             <div className="grid grid-cols-2 gap-3">
@@ -465,6 +557,11 @@ export default function AdminDashboard() {
                                                 <p className="text-xs text-gray-400 mt-1">
                                                     🛵 {u.livreur_info?.total_livraisons || 0} livraisons • ⭐ {u.livreur_info?.note_moyenne || 0}/5 •
                                                     {u.livreur_info?.disponible ? ' 🟢 En ligne' : ' 🔴 Hors ligne'}
+                                                </p>
+                                            )}
+                                            {u.role === 'commercant' && u.commercant && (
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    🏪 {u.commercant?.nom_boutique} • {u.commercant?.est_valide ? '✅ Validé' : '⏳ En attente'}
                                                 </p>
                                             )}
                                         </div>
