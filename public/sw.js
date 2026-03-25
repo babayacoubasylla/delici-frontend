@@ -11,34 +11,53 @@ const STATIC_ASSETS = [
   '/favicon.svg'
 ];
 
-// URLs à ne pas mettre en cache
-const EXCLUDED_URLS = [
+// URLs et patterns à ne pas mettre en cache
+const EXCLUDED_PATTERNS = [
   '/api/',
   '/socket.io/',
   '/login',
-  '/inscription'
+  '/inscription',
+  'chrome-extension://',
+  'moz-extension://',
+  'chrome://',
+  'about:'
 ];
+
+// Vérifier si une URL doit être exclue
+const shouldExclude = (url) => {
+  const urlString = url.toString();
+  return EXCLUDED_PATTERNS.some(pattern => urlString.includes(pattern));
+};
+
+// Vérifier si la requête peut être mise en cache
+const isCacheable = (request) => {
+  // Seulement les requêtes GET
+  if (request.method !== 'GET') return false;
+
+  // Exclure les extensions et APIs
+  if (shouldExclude(request.url)) return false;
+
+  return true;
+};
 
 // Installation du Service Worker
 self.addEventListener('install', (event) => {
   console.log('[SW] Installation');
-  
+
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => {
       console.log('[SW] Mise en cache des assets statiques');
       return cache.addAll(STATIC_ASSETS);
     })
   );
-  
-  // Forcer l'activation immédiate
+
   self.skipWaiting();
 });
 
 // Activation du Service Worker
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activation');
-  
-  // Supprimer les anciens caches
+
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -51,29 +70,32 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  
-  // Prendre le contrôle des clients
+
   event.waitUntil(clients.claim());
 });
 
 // Interception des requêtes
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  
-  // Ne pas mettre en cache les requêtes API
-  if (EXCLUDED_URLS.some(excluded => url.pathname.startsWith(excluded))) {
+  // Ignorer les requêtes non cacheables
+  if (!isCacheable(event.request)) {
     return;
   }
-  
+
+  const url = new URL(event.request.url);
+
   // Stratégie: Network first avec fallback cache
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Mettre en cache la réponse
-        const responseClone = response.clone();
-        caches.open(DYNAMIC_CACHE).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
+        // Mettre en cache la réponse uniquement si c'est une GET réussie
+        if (response && response.status === 200 && event.request.method === 'GET') {
+          const responseClone = response.clone();
+          caches.open(DYNAMIC_CACHE).then((cache) => {
+            cache.put(event.request, responseClone).catch((err) => {
+              console.warn('[SW] Erreur mise en cache:', err.message);
+            });
+          });
+        }
         return response;
       })
       .catch(() => {
@@ -82,12 +104,12 @@ self.addEventListener('fetch', (event) => {
           if (cachedResponse) {
             return cachedResponse;
           }
-          
+
           // Si c'est une page HTML, retourner la page d'erreur
-          if (event.request.headers.get('accept').includes('text/html')) {
+          if (event.request.headers.get('accept')?.includes('text/html')) {
             return caches.match('/index.html');
           }
-          
+
           return new Response('Hors ligne', {
             status: 503,
             statusText: 'Service Unavailable'
@@ -100,14 +122,14 @@ self.addEventListener('fetch', (event) => {
 // Gestion des notifications push
 self.addEventListener('push', (event) => {
   console.log('[SW] Notification push reçue', event);
-  
+
   let data = {
     title: 'DeliCI',
     body: 'Nouvelle notification',
-    icon: '/icon-192x192.png',
+    icon: '/favicon.svg',
     badge: '/favicon.svg'
   };
-  
+
   if (event.data) {
     try {
       data = event.data.json();
@@ -115,10 +137,10 @@ self.addEventListener('push', (event) => {
       data.body = event.data.text();
     }
   }
-  
+
   const options = {
     body: data.body,
-    icon: data.icon || '/icon-192x192.png',
+    icon: data.icon || '/favicon.svg',
     badge: data.badge || '/favicon.svg',
     vibrate: [200, 100, 200],
     data: {
@@ -126,17 +148,11 @@ self.addEventListener('push', (event) => {
       dateOfArrival: Date.now()
     },
     actions: [
-      {
-        action: 'open',
-        title: 'Ouvrir'
-      },
-      {
-        action: 'close',
-        title: 'Fermer'
-      }
+      { action: 'open', title: 'Ouvrir' },
+      { action: 'close', title: 'Fermer' }
     ]
   };
-  
+
   event.waitUntil(
     self.registration.showNotification(data.title, options)
   );
@@ -145,24 +161,22 @@ self.addEventListener('push', (event) => {
 // Gestion du clic sur une notification
 self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Clic sur notification', event);
-  
+
   event.notification.close();
-  
+
   const urlToOpen = event.notification.data?.url || '/';
-  
+
   event.waitUntil(
     clients.matchAll({
       type: 'window',
       includeUncontrolled: true
     }).then((windowClients) => {
-      // Vérifier si une fenêtre est déjà ouverte
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
         if (client.url === urlToOpen && 'focus' in client) {
           return client.focus();
         }
       }
-      // Sinon ouvrir une nouvelle fenêtre
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
@@ -173,7 +187,7 @@ self.addEventListener('notificationclick', (event) => {
 // Gestion de la synchronisation en arrière-plan
 self.addEventListener('sync', (event) => {
   console.log('[SW] Synchronisation', event);
-  
+
   if (event.tag === 'sync-orders') {
     event.waitUntil(syncOrders());
   }
@@ -184,7 +198,7 @@ async function syncOrders() {
   try {
     const cache = await caches.open(DYNAMIC_CACHE);
     const offlineOrders = await cache.match('/offline-orders');
-    
+
     if (offlineOrders) {
       const orders = await offlineOrders.json();
       for (const order of orders) {
