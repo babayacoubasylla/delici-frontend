@@ -140,6 +140,7 @@ export default function CommercantDashboard() {
     const [showFormProduit, setShowFormProduit] = useState(false);
     const [produitEdite, setProduitEdite] = useState<any>(null);
     const [showCreerCommerce, setShowCreerCommerce] = useState(false);
+    const [erreurValidation, setErreurValidation] = useState(false);
     const [formCommerce, setFormCommerce] = useState({
         nom_boutique: '', categorie: 'restaurant', description: '',
         quartier: '', telephone: '', frais_livraison: '500',
@@ -151,21 +152,43 @@ export default function CommercantDashboard() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [commerceRes, commandesRes, statsRes] = await Promise.all([
-                api.get('/commercants/mon-commerce/details').catch(() => null),
-                api.get('/commandes/commerce/liste').catch(() => ({ data: { data: { commandes: [] } } })),
-                api.get('/stats/commercant').catch(() => ({ data: { data: { stats: {} } } })),
-            ]);
-            if (commerceRes) {
-                setCommerce(commerceRes.data.data.commercant);
-                const produitsRes = await api.get(`/produits/commercant/${commerceRes.data.data.commercant._id}`);
-                setProduits(produitsRes.data.data.produits);
-            }
-            setCommandes(commandesRes.data.data.commandes);
-            setStats(statsRes.data.data.stats);
+            setErreurValidation(false);
+
+            // ✅ Route correcte : /commercants/mon-commerce/details
+            const commerceRes = await api.get('/commercants/mon-commerce/details').catch((err) => {
+                if (err.response?.status === 404) setShowCreerCommerce(true);
+                return null;
+            });
+
+            if (!commerceRes) return;
+
+            const commercant = commerceRes.data.data.commercant;
+            setCommerce(commercant);
+
+            // Stats depuis les champs du commerce (pas de route /stats/commercant)
+            setStats({
+                total_commandes: commercant.total_commandes ?? 0,
+                livrees: commercant.total_commandes ?? 0,
+                chiffre_affaires: commercant.chiffre_affaires ?? 0,
+            });
+
+            // ✅ Route correcte : /commandes/commerce/liste
+            const commandesRes = await api.get('/commandes/commerce/liste').catch(() => ({
+                data: { data: { commandes: [] } }
+            }));
+            setCommandes(commandesRes.data.data.commandes ?? []);
+
+            // Produits
+            const produitsRes = await api.get(`/produits/commercant/${commercant._id}`).catch(() => ({
+                data: { data: { produits: [] } }
+            }));
+            setProduits(produitsRes.data.data.produits ?? []);
+
         } catch (error: any) {
-            if (error.response?.status === 404) setShowCreerCommerce(true);
-        } finally { setLoading(false); }
+            console.error('Erreur fetchData:', error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const creerCommerce = async () => {
@@ -180,7 +203,7 @@ export default function CommercantDashboard() {
                 commande_minimum: parseInt(formCommerce.commande_minimum),
                 ville: user?.ville,
             });
-            toast.success('Commerce créé ! 🎉');
+            toast.success('Commerce créé ! 🎉 En attente de validation admin.');
             setShowCreerCommerce(false);
             fetchData();
         } catch (error: any) {
@@ -191,12 +214,20 @@ export default function CommercantDashboard() {
     const toggleOuverture = async () => {
         try {
             setTogglingOuverture(true);
-            await api.patch('/commercants/mon-commerce/ouverture');
-            setCommerce((prev: any) => ({ ...prev, est_ouvert: !prev.est_ouvert }));
-            toast.success(commerce.est_ouvert ? '🔴 Commerce fermé' : '🟢 Commerce ouvert !');
-        } catch (error) {
-            toast.error('Erreur');
-        } finally { setTogglingOuverture(false); }
+            const res = await api.patch('/commercants/mon-commerce/ouverture');
+            setCommerce((prev: any) => ({ ...prev, est_ouvert: res.data.data.est_ouvert }));
+            toast.success(res.data.message);
+        } catch (error: any) {
+            const msg = error.response?.data?.message || 'Erreur';
+            // ✅ Message clair si le commerce n'est pas encore validé
+            if (error.response?.status === 403) {
+                toast.error('⚠️ Votre commerce doit être validé par un admin avant ouverture.');
+            } else {
+                toast.error(msg);
+            }
+        } finally {
+            setTogglingOuverture(false);
+        }
     };
 
     const changerStatut = async (commandeId: string, statut: string) => {
@@ -225,6 +256,24 @@ export default function CommercantDashboard() {
     if (loading) return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
             <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+    );
+
+    // ✅ Commerce en attente de validation admin
+    if (commerce && commerce.statut === 'en_attente') return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-white rounded-2xl p-8 text-center shadow-sm">
+                <p className="text-5xl mb-4">⏳</p>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Commerce en attente de validation</h1>
+                <p className="text-gray-500 text-sm mb-6">
+                    Votre commerce <strong>{commerce.nom_boutique}</strong> a été créé avec succès.
+                    Un administrateur doit le valider avant que vous puissiez ouvrir.
+                </p>
+                <button onClick={() => { logout(); navigate('/login'); }}
+                    className="flex items-center gap-2 mx-auto px-4 py-2 bg-gray-100 rounded-xl text-gray-600 text-sm font-semibold">
+                    <LogOut className="w-4 h-4" /> Se déconnecter
+                </button>
+            </div>
         </div>
     );
 
@@ -332,21 +381,34 @@ export default function CommercantDashboard() {
                             </span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={toggleOuverture} disabled={togglingOuverture}
-                                className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-sm font-semibold transition-all"
+                            {/* ✅ Bouton désactivé si non validé */}
+                            <button
+                                onClick={toggleOuverture}
+                                disabled={togglingOuverture || commerce?.statut !== 'actif' || !commerce?.est_valide}
+                                title={commerce?.statut !== 'actif' ? 'En attente de validation admin' : ''}
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                 style={{
                                     borderColor: commerce?.est_ouvert ? '#009639' : '#ff7300',
                                     color: commerce?.est_ouvert ? '#009639' : '#ff7300'
                                 }}>
-                                {commerce?.est_ouvert
-                                    ? <><ToggleRight className="w-5 h-5" /> Fermer</>
-                                    : <><ToggleLeft className="w-5 h-5" /> Ouvrir</>}
+                                {togglingOuverture
+                                    ? <Loader className="w-5 h-5 animate-spin" />
+                                    : commerce?.est_ouvert
+                                        ? <><ToggleRight className="w-5 h-5" /> Fermer</>
+                                        : <><ToggleLeft className="w-5 h-5" /> Ouvrir</>}
                             </button>
                             <button onClick={() => { logout(); navigate('/login'); }} className="p-2 bg-gray-100 rounded-xl">
                                 <LogOut className="w-5 h-5 text-gray-500" />
                             </button>
                         </div>
                     </div>
+
+                    {/* ✅ Bandeau si commerce non validé */}
+                    {commerce && !commerce.est_valide && (
+                        <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-700 font-medium">
+                            ⏳ Votre commerce est en attente de validation par un administrateur.
+                        </div>
+                    )}
                 </div>
             </header>
 
@@ -510,7 +572,7 @@ export default function CommercantDashboard() {
                                                 <Edit className="w-4 h-4" />
                                             </button>
                                             <button onClick={() => supprimerProduit(p._id)}
-                                                className="p-1.5 bg-red-50 rounded-lg text-red-500 hover:bg-red-100">
+                                                className="p-1.5 bg-red-50 rounded-lg text-red-50 hover:bg-red-100">
                                                 <X className="w-4 h-4" />
                                             </button>
                                         </div>
@@ -539,6 +601,7 @@ export default function CommercantDashboard() {
                                     { label: 'Catégorie', value: categorieCommerce?.label },
                                     { label: 'Ville', value: commerce?.ville },
                                     { label: 'Quartier', value: commerce?.adresse?.quartier },
+                                    { label: 'Statut', value: commerce?.statut === 'actif' ? '✅ Validé' : '⏳ En attente' },
                                 ].map(({ label, value }) => (
                                     <div key={label} className="flex justify-between items-center py-2 border-b border-gray-50">
                                         <span className="text-gray-600 text-sm">{label}</span>
