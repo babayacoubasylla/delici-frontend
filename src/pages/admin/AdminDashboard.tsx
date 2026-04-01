@@ -16,14 +16,14 @@ const STATUT_COLORS: Record<string, string> = {
 };
 const TYPE_COMMERCE_LABELS: Record<string, string> = {
     restaurant_fastfood: '🍔 Restaurant',
-    supermarché_épicerie: '🛒 Supermarché',
-    marché_légumes: '🥬 Marché',
-    boulangerie_pâtisserie: '🥖 Boulangerie',
-    téléphonie_électronique: '📱 Électronique',
-    vêtements_mode: '👕 Mode',
-    coiffure_beauté: '💇 Coiffure/Beauté',
+    'supermarché_épicerie': '🛒 Supermarché',
+    'marché_légumes': '🥬 Marché',
+    'boulangerie_pâtisserie': '🥖 Boulangerie',
+    'téléphonie_électronique': '📱 Électronique',
+    'vêtements_mode': '👕 Mode',
+    'coiffure_beauté': '💇 Coiffure/Beauté',
     pharmacie_parapharmacie: '💊 Pharmacie',
-    services: '🔨 Services',
+    services: '🔧 Services',
     autre: '🏪 Autre'
 };
 
@@ -35,13 +35,11 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
     const [showPassword, setShowPassword] = useState(false);
     const [form, setForm] = useState({
         nom: '', prenom: '', telephone: '', email: '', password: '', ville: '', role: '',
-        // Commerce
         nom_boutique: '', type_commerce: '', categorie: '', description: '', quartier: '', telephone_commerce: '',
         frais_livraison: '500', temps_preparation: '20', commande_minimum: '1000',
     });
 
     const update = (field: string, val: string) => setForm(prev => ({ ...prev, [field]: val }));
-
     const choisirRole = (r: string) => { setRole(r); update('role', r); setStep('infos'); };
 
     const creer = async () => {
@@ -50,13 +48,10 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
         }
         try {
             setLoading(true);
-            // 1. Créer l'utilisateur
             const userRes = await api.post('/auth/inscription', {
                 nom: form.nom, prenom: form.prenom, telephone: form.telephone,
                 email: form.email, password: form.password, ville: form.ville, role: form.role
             });
-
-            // 2. Si commercant, créer le commerce
             if (role === 'commercant' && form.nom_boutique) {
                 const token = userRes.data.data.token;
                 await api.post('/commercants/inscription', {
@@ -72,7 +67,6 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
                     ville: form.ville,
                 }, { headers: { Authorization: `Bearer ${token}` } });
             }
-
             toast.success(`✅ ${ROLE_LABELS[role]} créé avec succès !`);
             onSuccess();
             onClose();
@@ -90,9 +84,7 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
                     </h2>
                     <button onClick={onClose} className="p-2 bg-gray-100 rounded-xl"><X className="w-5 h-5" /></button>
                 </div>
-
                 <div className="p-6 space-y-4">
-                    {/* ÉTAPE 1 : Choisir le rôle */}
                     {step === 'role' && (
                         <div className="grid grid-cols-2 gap-3">
                             {[
@@ -110,8 +102,6 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
                             ))}
                         </div>
                     )}
-
-                    {/* ÉTAPE 2 : Infos personnelles */}
                     {step === 'infos' && (
                         <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-3">
@@ -151,7 +141,6 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
                                     </button>
                                 </div>
                             </div>
-
                             <div className="flex gap-2 pt-2">
                                 <button onClick={() => setStep('role')}
                                     className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold">
@@ -173,8 +162,6 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
                             </div>
                         </div>
                     )}
-
-                    {/* ÉTAPE 3 : Infos commerce (si commercant) */}
                     {step === 'commerce' && (
                         <div className="space-y-3">
                             <div>
@@ -194,7 +181,7 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
                                     <option value="vêtements_mode">👕 Vêtements / Mode</option>
                                     <option value="coiffure_beauté">💇 Coiffure / Beauté</option>
                                     <option value="pharmacie_parapharmacie">💊 Pharmacie / Parapharmacie</option>
-                                    <option value="services">🔨 Services</option>
+                                    <option value="services">🔧 Services</option>
                                     <option value="autre">🏪 Autre</option>
                                 </select>
                             </div>
@@ -211,21 +198,17 @@ const FormulaireAjout = ({ onClose, onSuccess }: { onClose: () => void; onSucces
                             <div className="grid grid-cols-3 gap-2">
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-700 mb-1">Frais livraison</label>
-                                    <input type="number" value={form.frais_livraison} onChange={e => update('frais_livraison', e.target.value)}
-                                        className="input-field" />
+                                    <input type="number" value={form.frais_livraison} onChange={e => update('frais_livraison', e.target.value)} className="input-field" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-700 mb-1">Temps prépa (min)</label>
-                                    <input type="number" value={form.temps_preparation} onChange={e => update('temps_preparation', e.target.value)}
-                                        className="input-field" />
+                                    <input type="number" value={form.temps_preparation} onChange={e => update('temps_preparation', e.target.value)} className="input-field" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-700 mb-1">Min commande</label>
-                                    <input type="number" value={form.commande_minimum} onChange={e => update('commande_minimum', e.target.value)}
-                                        className="input-field" />
+                                    <input type="number" value={form.commande_minimum} onChange={e => update('commande_minimum', e.target.value)} className="input-field" />
                                 </div>
                             </div>
-
                             <div className="flex gap-2 pt-2">
                                 <button onClick={() => setStep('infos')}
                                     className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold">
@@ -314,25 +297,23 @@ export default function AdminDashboard() {
         finally { setActionLoading(null); }
     };
 
-    // NOUVELLE FONCTION : Valider un commerçant
+    // ✅ CORRIGÉ : envoie { statut: 'actif' } dans le body
     const validerCommercant = async (commercantId: string) => {
         setActionLoading(commercantId);
         try {
-            await api.patch(`/commercants/admin/${commercantId}/valider`);
+            await api.patch(`/commercants/admin/${commercantId}/valider`, { statut: 'actif' });
             toast.success('✅ Commerçant validé avec succès !');
-            fetchData(); // Recharge les données
+            fetchData();
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Erreur lors de la validation');
         } finally { setActionLoading(null); }
     };
 
-    // NOUVELLE FONCTION : Rejeter un commerçant
+    // ✅ CORRIGÉ : envoie { statut: 'suspendu' } dans le body
     const rejeterCommercant = async (commercantId: string) => {
         setActionLoading(commercantId);
-        const raison = prompt('Raison du rejet :');
-        if (!raison) return;
         try {
-            await api.patch(`/commercants/admin/${commercantId}/rejeter`, { raison });
+            await api.patch(`/commercants/admin/${commercantId}/valider`, { statut: 'suspendu' });
             toast.success('❌ Commerçant rejeté');
             fetchData();
         } catch (error: any) {
@@ -377,7 +358,6 @@ export default function AdminDashboard() {
             </header>
 
             <main className="max-w-4xl mx-auto px-4 py-6">
-                {/* Stats rapides */}
                 {stats && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                         {[
@@ -396,7 +376,6 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
-                {/* Comment ça marche */}
                 <div className="card mb-6 border-l-4 border-orange-500">
                     <h3 className="font-bold text-gray-900 mb-3">📖 Comment fonctionne DeliCI</h3>
                     <div className="space-y-2 text-sm text-gray-600">
@@ -411,7 +390,6 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                {/* Onglets */}
                 <div className="flex gap-1 mb-6 bg-white rounded-2xl p-1 shadow-sm border border-gray-100 overflow-x-auto">
                     {[
                         { key: 'stats', label: '📊 Stats' },
@@ -451,11 +429,11 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        {/* Section des commerçants en attente */}
+                        {/* ✅ Section commerçants en attente */}
                         <div className="card">
                             <h3 className="font-bold text-gray-900 mb-4">⏳ Commerçants en attente de validation</h3>
                             {commercants.filter(c => !c.est_valide).length === 0 ? (
-                                <p className="text-gray-500 text-sm">Aucun commerçant en attente</p>
+                                <p className="text-gray-500 text-sm">Aucun commerçant en attente ✅</p>
                             ) : (
                                 <div className="space-y-3">
                                     {commercants.filter(c => !c.est_valide).map((c: any) => (
@@ -464,21 +442,22 @@ export default function AdminDashboard() {
                                                 <p className="font-bold text-gray-900">{c.nom_boutique}</p>
                                                 <p className="text-sm text-gray-600">{TYPE_COMMERCE_LABELS[c.type_commerce] || '🏪 Autre'}</p>
                                                 <p className="text-xs text-gray-500">📞 {c.telephone} • 📍 {c.ville}</p>
+                                                <p className="text-xs text-gray-400">
+                                                    Propriétaire : {c.proprietaire?.prenom} {c.proprietaire?.nom}
+                                                </p>
                                             </div>
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => validerCommercant(c._id)}
                                                     disabled={actionLoading === c._id}
-                                                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-bold bg-green-500 hover:bg-green-600"
-                                                >
+                                                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-bold bg-green-500 hover:bg-green-600">
                                                     {actionLoading === c._id ? <Loader className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
                                                     Valider
                                                 </button>
                                                 <button
                                                     onClick={() => rejeterCommercant(c._id)}
                                                     disabled={actionLoading === c._id}
-                                                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-bold bg-red-500 hover:bg-red-600"
-                                                >
+                                                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-white text-xs font-bold bg-red-500 hover:bg-red-600">
                                                     <X className="w-3 h-3" />
                                                     Rejeter
                                                 </button>
@@ -538,9 +517,7 @@ export default function AdminDashboard() {
                                 <Plus className="w-4 h-4" /> Ajouter
                             </button>
                         </div>
-
                         <p className="text-sm text-gray-500">{users.length} utilisateur(s)</p>
-
                         <div className="space-y-3">
                             {users.map((u: any) => (
                                 <div key={u._id} className="card">
@@ -553,12 +530,6 @@ export default function AdminDashboard() {
                                             </div>
                                             <p className="text-sm text-gray-500 mt-1">📞 {u.telephone}</p>
                                             <p className="text-xs text-gray-400">📍 {u.ville}</p>
-                                            {u.role === 'livreur' && (
-                                                <p className="text-xs text-gray-400 mt-1">
-                                                    🛵 {u.livreur_info?.total_livraisons || 0} livraisons • ⭐ {u.livreur_info?.note_moyenne || 0}/5 •
-                                                    {u.livreur_info?.disponible ? ' 🟢 En ligne' : ' 🔴 Hors ligne'}
-                                                </p>
-                                            )}
                                             {u.role === 'commercant' && u.commercant && (
                                                 <p className="text-xs text-gray-400 mt-1">
                                                     🏪 {u.commercant?.nom_boutique} • {u.commercant?.est_valide ? '✅ Validé' : '⏳ En attente'}
@@ -619,7 +590,7 @@ export default function AdminDashboard() {
                                                 <p className="font-bold text-gray-900">{cmd.reference}</p>
                                                 <p className="text-sm text-gray-500">{cmd.commercant?.nom_boutique} — {cmd.ville}</p>
                                                 <p className="text-xs text-gray-400">Client : {cmd.client?.prenom} {cmd.client?.nom} • {cmd.client?.telephone}</p>
-                                                {cmd.livreur && <p className="text-xs text-gray-400">Livreur : {cmd.livreur?.prenom} {cmd.livreur?.nom} • {cmd.livreur?.telephone}</p>}
+                                                {cmd.livreur && <p className="text-xs text-gray-400">Livreur : {cmd.livreur?.prenom} {cmd.livreur?.nom}</p>}
                                             </div>
                                             <div className="text-right">
                                                 <span className={`badge ${cmd.statut === 'livree' ? 'badge-green' : cmd.statut === 'annulee' ? 'badge-red' : 'badge-orange'}`}>
@@ -651,7 +622,7 @@ export default function AdminDashboard() {
                                         <div>
                                             <h3 className="font-bold text-gray-900 text-lg">{zone.nom}</h3>
                                             <span className={`badge ${zone.active ? 'badge-green' : 'badge-gray'}`}>
-                                                {zone.active ? '🟢 Active' : '⭕ Inactive'}
+                                                {zone.active ? '🟢 Active' : '⚫ Inactive'}
                                             </span>
                                         </div>
                                         <MapPin className="w-5 h-5 text-gray-400" />
